@@ -130,10 +130,10 @@ assets:
   # The Windows raw binaries END in `.exe` while their `.gz` twins DROP it
   # (`lefthook_<V>_Windows_arm64.gz`, not `…arm64.exe.gz`), so `\\.exe$` is
   # both the raw-asset selector and the gz exclusion in one.
-  # windows/amd64:
-  #   - "^lefthook_.*_Windows_x86_64\\.exe$"
-  # windows/arm64:
-  #   - "^lefthook_.*_Windows_arm64\\.exe$"
+  windows/amd64:
+    - "^lefthook_.*_Windows_x86_64\\.exe$"
+  windows/arm64:
+    - "^lefthook_.*_Windows_arm64\\.exe$"
 
 asset_type:
   # Raw binary on every platform — there is no archive to strip, so the file
