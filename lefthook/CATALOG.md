@@ -52,17 +52,6 @@ lefthook run pre-commit --force   # run a hook group without committing
 `git` must be on `PATH` — lefthook resolves the repository with
 `git rev-parse` before doing anything else.
 
-## Install with ocx
-
-```sh
-ocx install ocx.sh/evilmartians/lefthook
-```
-
-```sh
-# or pin a specific version
-ocx install ocx.sh/evilmartians/lefthook:2.1.10
-```
-
 ## Links
 
 - [lefthook on GitHub](https://github.com/evilmartians/lefthook)
