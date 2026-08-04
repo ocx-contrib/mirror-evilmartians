@@ -121,10 +121,10 @@ assets:
   # The macOS os token is `MacOS` — not `Darwin`, not lowercase `darwin`.
   # Uncommented together with the matching `platforms:` keys in
   # ../mirror-base.yml, never on their own.
-  # darwin/amd64:
-  #   - "^lefthook_.*_MacOS_x86_64$"
-  # darwin/arm64:
-  #   - "^lefthook_.*_MacOS_arm64$"
+  darwin/amd64:
+    - "^lefthook_.*_MacOS_x86_64$"
+  darwin/arm64:
+    - "^lefthook_.*_MacOS_arm64$"
   #
   # ── Pass 3 (windows) ───────────────────────────────────────────────────────
   # The Windows raw binaries END in `.exe` while their `.gz` twins DROP it
