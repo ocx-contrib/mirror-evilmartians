@@ -1,0 +1,188 @@
+# ⚠ `extends:` is a SHALLOW merge of TOP-LEVEL KEYS. Setting a key here
+# REPLACES the base's block outright — there is no per-key merge. `platforms:`
+# is deliberately NOT restated below: it carries the container legs that make
+# this spec's bare Linux keys honest, and restating it to tweak one runner
+# would drop them all without reddening anything. This repo is single-package,
+# so the measured matrix lives in the base and nothing here touches it.
+extends: ../mirror-base.yml
+
+name: lefthook
+
+# Logical index package `evilmartians/lefthook` at the physical path
+# `ghcr.io/ocx-contrib/evilmartians/lefthook` — slash segments, never
+# hyphen-flattened. Two segments always. `evilmartians` is the consultancy that
+# authors and publishes lefthook (the LICENSE names Arkweid, its former
+# handle), so the org IS the project's own brand — skill Phase 1 rule 2, the
+# same reason jq is `jqlang/jq`. The first segment must be this repo's own
+# GitHub owner: GITHUB_TOKEN only authorises packages owned by the repo the
+# workflow runs in.
+target:
+  registry: ghcr.io
+  repository: ocx-contrib/evilmartians/lefthook
+
+source:
+  type: github_release
+  owner: evilmartians
+  repo: lefthook
+  # lefthook tags carry a "v" prefix (e.g. "v2.1.10"); the captured version does
+  # not — the asset FILENAMES spell it without the v, so the two must not be
+  # conflated. Verified against every tag back to v1.13.5: the scheme is uniform
+  # bare `vMAJOR.MINOR.PATCH`, with no rc/beta suffix anywhere in the listing.
+  tag_pattern: "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+
+# ─── libc gate (Phase 3.5) — the evidence, not the conclusion ───────────────
+#
+# `os.features` states what an artifact REQUIRES OF THE HOST. lefthook is pure
+# Go with no cgo, so upstream ships one Linux binary per arch with no musl/gnu
+# split. Measured on ALL FOUR declared Linux artifacts at BOTH ends of the
+# mirrored range (2 arches × 2.1.8 and 2.1.10), not just the newest:
+#
+#   $ file lefthook_2.1.10_Linux_x86_64
+#   ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked,
+#   Go BuildID=…, stripped
+#   $ file lefthook_2.1.10_Linux_arm64
+#   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), statically
+#   linked, Go BuildID=…, stripped
+#   $ readelf -l lefthook_2.1.{8,10}_Linux_{x86_64,arm64} | grep -c INTERP → 0 (all four)
+#   $ readelf -d lefthook_2.1.{8,10}_Linux_{x86_64,arm64} | grep -c NEEDED → 0 (all four)
+#
+#     ⇒ requires NOTHING of the host → BARE `linux/amd64` and `linux/arm64`.
+#       The alpine container leg in ../mirror-base.yml is what turns that
+#       universality claim into evidence. Zero DT_NEEDED also means no shared
+#       library needs `containers[].setup`; the `git` those legs install is
+#       lefthook's own runtime dependency, not a linkage one.
+#
+#   $ stat -c '%a' lefthook_2.1.*_Linux_*        → 644 (every asset)
+#       GitHub serves raw binaries WITHOUT the exec bit. `prepare` chmods 0755
+#       exactly the names metadata.json declares, which is why the hand-listed
+#       `binaries` claim there is load-bearing rather than documentation.
+#
+# ─── Asset format: RAW BINARY, and the .gz twin that false-greens ───────────
+#
+# Every release ships each platform TWICE: a raw uncompressed binary and a
+# `.gz` twin of it. A bare single-file `.gz` (a compressed binary with NO tar
+# layer) is not a supported archive format, and `asset_type: binary` does not
+# red on one — it FALSE-GREENS, publishing still-compressed bytes at mode 0755.
+# Verified this is a bare gz and not a tarball:
+#
+#   $ gzip -dc lefthook_2.1.10_Linux_x86_64.gz | tar tf -
+#   tar: This does not look like a tar archive
+#   $ gzip -dc lefthook_2.1.10_Linux_x86_64.gz | head -c4 | xxd
+#   00000000: 7f45 4c46                                .ELF
+#
+# So every pattern below takes the RAW asset and is END-ANCHORED. The anchor is
+# not decoration: `lefthook_2.1.10_Linux_x86_64` is a strict PREFIX of
+# `lefthook_2.1.10_Linux_x86_64.gz`, so an unanchored pattern matches both and
+# the `.gz` is the one that would silently ship broken.
+#
+# ─── The duplicate-asset trap on linux/arm64 ───────────────────────────────
+#
+# Upstream publishes `lefthook_<V>_Linux_arm64` AND `lefthook_<V>_Linux_aarch64`
+# on EVERY release, plus a `.gz` twin of each — four candidates for one
+# platform. They are the same file, not two builds:
+#
+#   $ grep -E '_Linux_(arm64|aarch64)$' lefthook_checksums.txt
+#   9e4e2eac…bd5  lefthook_2.1.10_Linux_aarch64
+#   9e4e2eac…bd5  lefthook_2.1.10_Linux_arm64
+#
+# Identical sha256, so the choice is arbitrary and only DETERMINISM matters:
+# `_arm64` is taken, for consistency with the arch token every other os in this
+# release uses. The `$` anchor is what keeps `_aarch64` (and both `.gz` twins)
+# out — a pattern permitting either would match two assets, which is a hard
+# ambiguous error rather than a silent skip.
+#
+# ─── Scope + resolution (verified on EVERY in-range release) ────────────────
+#
+# The mirrored range is exactly v2.1.8, v2.1.9, v2.1.10 — three releases. Each
+# of the six patterns below was matched against each release's FULL 31-asset
+# list: EXACTLY ONE match, every time, both ways. A pattern matching zero is
+# silently skipped rather than an error, which would yield a green run with a
+# missing platform. No in-range release is asset-less, and every release's
+# asset names carry ITS OWN version string (2.1.8 assets on v2.1.8, and so on)
+# — checked explicitly, because an upstream shipping the previous version's
+# binaries under a new tag greens everything.
+#
+# Upstream also publishes, and this mirror deliberately does not carry:
+#   lefthook_<V>_Windows_i386.exe          — ocx has no 386 architecture
+#   lefthook_<V>_{Freebsd,Openbsd}_*       — neither is an ocx os
+#   lefthook_<V>_{amd64,arm64}.{apk,deb,rpm} — distro sidecars, and they carry
+#                                            NO os token at all, so the os
+#                                            could not be derived from the name
+#   lefthook_<V>_*.gz                      — bare gz, see above
+#   lefthook_<V>_Linux_aarch64(.gz)        — duplicate of Linux_arm64
+#   lefthook_checksums.txt                 — sidecar
+# The anchored ^…$ regexes are what keep all of the above out.
+assets:
+  linux/amd64:
+    - "^lefthook_.*_Linux_x86_64$"
+  linux/arm64:
+    - "^lefthook_.*_Linux_arm64$"
+  # ── Pass 2 (darwin) ────────────────────────────────────────────────────────
+  # The macOS os token is `MacOS` — not `Darwin`, not lowercase `darwin`.
+  # Uncommented together with the matching `platforms:` keys in
+  # ../mirror-base.yml, never on their own.
+  # darwin/amd64:
+  #   - "^lefthook_.*_MacOS_x86_64$"
+  # darwin/arm64:
+  #   - "^lefthook_.*_MacOS_arm64$"
+  #
+  # ── Pass 3 (windows) ───────────────────────────────────────────────────────
+  # The Windows raw binaries END in `.exe` while their `.gz` twins DROP it
+  # (`lefthook_<V>_Windows_arm64.gz`, not `…arm64.exe.gz`), so `\\.exe$` is
+  # both the raw-asset selector and the gz exclusion in one.
+  # windows/amd64:
+  #   - "^lefthook_.*_Windows_x86_64\\.exe$"
+  # windows/arm64:
+  #   - "^lefthook_.*_Windows_arm64\\.exe$"
+
+asset_type:
+  # Raw binary on every platform — there is no archive to strip, so the file
+  # lands directly at the content root and PATH is a bare ${installPath}. That
+  # is the one layout where a bare ${installPath} is correct, and it is why
+  # `bin_scan` must stay `off` with `binaries` hand-listed (../mirror-base.yml).
+  #
+  # The upstream Windows assets already END in `.exe`, so the suffix survives
+  # into the bundle and no per-platform `name: lefthook.exe` override is needed
+  # — unlike mirror-direnv, whose 2.37.0+ Windows assets dropped the suffix and
+  # therefore had to name it back on. Verified locally by running `pipeline
+  # prepare` against a windows/amd64-only temp spec and listing the bundle:
+  # `tar tvf` showed `-rwxr-xr-x … lefthook.exe`.
+  type: binary
+  name: lefthook
+
+metadata:
+  default: metadata.json
+
+catalog:
+  logo: logo.svg
+
+versions:
+  # 2.1.8 is the floor. Nothing in the asset naming forces it — the scheme is
+  # uniform far below — so it is a CATALOG-SCOPE choice: the current 2.1.x
+  # train, three releases, rather than backfilling six years of tags. Every
+  # release from it up is complete: no in-range release is missing a declared
+  # platform's asset, and an asset-less release inside the range would be
+  # dropped SILENTLY by the pipeline.
+  min: "2.1.8"
+  new_per_run: 5
+  poll_interval: "33 */6 * * *"
+
+tests:
+  # `script:` resolves from the REPOSITORY ROOT — unlike `metadata.default` and
+  # `catalog.logo` above, which resolve against this spec's own directory.
+  - name: smoke
+    script: lefthook/tests/smoke.star
+
+annotations:
+  # From the Phase 1.5 license gate:
+  #   $ gh api repos/evilmartians/lefthook/license --jq '.license.spdx_id'
+  #   MIT
+  # Re-read from the raw LICENSE blob as well: unmodified MIT text,
+  # Copyright (c) 2019 Arkweid, no added clauses.
+  org.opencontainers.image.licenses: "MIT"
+
+announce:
+  # Spelled out, not derived from target.repository — the logical name and the
+  # physical path are related by convention only.
+  package: evilmartians/lefthook
+  fork: ocx-contrib/index
